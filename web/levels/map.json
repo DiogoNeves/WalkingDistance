@@ -6,5 +6,13 @@
 	},
 
 	"properties": {
+		"colours": {
+			"wall": -1,
+			"neighbour": 0,
+			"visited": 4278190335,
+			"in_stack": 4294901760
+		},
+
+		"search_map": [0, 1, 0, 1, 0, 1, 0, 1, 0]
 	}
 }

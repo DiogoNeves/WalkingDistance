@@ -21,9 +21,9 @@ Game.implementation = function (level) {
 	self.__debug = {
 		infoPoints: /*/false/*/true/**/,
 		frameRate: /*/false/*/true/**/,
-		extendRender: /*/false/*/true/**/,
+		extendRender: /**/false/*/true/**/,
 		walkState: /*/false/*/true/**/,
-		overlayState: /*/false/*/false/**/
+		overlayState: /*/false/*/true/**/
 	};
 	//self.__debug = null;
 
@@ -33,8 +33,10 @@ Game.implementation = function (level) {
 
 	self.__map = null;
 	self.__state = null; // Used to keep state between iterations
-	self.__stateMap = null; // Used for debug draw
 	self.__goal = null;
+	self.__start = null;
+
+	self.__iterationDelay = 1; // in millis
 };
 
 
@@ -49,6 +51,15 @@ Game.implementation.prototype.mouseClicked = function () {
 		var pos = { x: self.processing.mouseX, y: self.processing.mouseY };
 		if (pos.x < self.__screen.width) // Account for when we're extending the canvas
 			self.__goal = pos;
+	} else if (self.__start == null) {
+		var pos = { x: self.processing.mouseX, y: self.processing.mouseY };
+		if (pos.x < self.__screen.width) { // Account for when we're extending the canvas
+			// Blank any previous state
+			self.__state = { isTraversing: true, timestamp: 0, lastPos: pos };
+			self.__state.map = self.processing.createImage(self.__screen.width, self.__screen.height, self.processing.ARGB);
+			self.__start = pos;
+			self.__isTraversing = true;
+		}
 	}
 };
 
@@ -59,6 +70,10 @@ Game.implementation.prototype.startGame = function() {
 	// This could probably be done with a counter but because I don't know if ++ is thread safe in js
 	// I decided to go with a more expensive but safer approach...
 	var loadedSignal = { value: false };
+
+	// Fix-up the neighbour colour format (str to int as json doesn't support hex values)
+	for (var i in self.level.properties.colours)
+		self.level.properties.colours[i] = parseInt(self.level.properties.colours[i]);
 
 	// Load map
 	self.__map = self.processing.loadImage(self.level.resources.map, 'png', function() {
@@ -73,6 +88,77 @@ Game.implementation.prototype.startGame = function() {
 		self.processing.mouseClicked = objectWrapper(self, self.mouseClicked);
 		self.processing.loop();
 	});
+};
+
+Game.implementation.prototype.isSameColour = function (map, pos, colour) {
+	var self = this;
+	var i = pos.y * self.__screen.width + pos.x;
+	return map.pixels.getPixel(i) == colour;
+};
+
+Game.implementation.prototype.isWall = function (pos) {
+	var self = this;
+	return self.isSameColour(self.__map, pos, self.level.properties.colours.wall);
+};
+
+Game.implementation.prototype.wasVisited = function (map, pos) {
+	var self = this;
+	return !self.isSameColour(map, pos, self.level.properties.colours.neighbour);
+};
+
+Game.implementation.prototype.setColour = function (map, pos, colour) {
+	var self = this;
+	var i = pos.y * self.__screen.width + pos.x;
+	map.pixels.setPixel(i, colour);
+};
+
+Game.implementation.prototype.updateDepthFirstSearch = function (state, goal) {
+	var self = this;
+
+	if (!isValid(state) || !(isValid(state.stack) || isValid(state.lastPos))) return;
+
+	if (!isValid(state.stack)) {
+		// Needs initialising
+		state.stack = new Api.DataStruct.Stack();
+		state.stack.push(state.lastPos);
+		return;
+	}
+
+	// Are we stuck?
+	if (state.stack.size() == 0) {
+		state.isTraversing = false;
+		return;
+	}
+
+	// Continue searching
+	var vertex = state.stack.pop();
+	state.lastPos = vertex;
+	if (vertex.x === goal.x && vertex.y === goal.y) {
+		state.isTraversing = false;
+		return;
+	}
+
+	self.setColour(state.map, vertex, self.level.properties.colours.visited);
+
+	// Add children to the stack
+	for (var dx = 0; dx < 3; ++dx) {
+		for (var dy = 0; dy < 3; ++dy) {
+			if (self.level.properties.search_map[dy * 3 + dx] === 1) {
+				var pos = { x: vertex.x + (dx - 1), y: vertex.y + (dy - 1) };
+				if (pos.x >= 0 && pos.x < self.__screen.width && pos.y >= 0 && pos.y < self.__screen.height) {
+					if (!(self.wasVisited(state.map, pos) || self.isWall(pos))) {
+						state.stack.push(pos);
+						self.setColour(state.map, pos, self.level.properties.colours.in_stack);
+					}
+				}
+			}
+		}
+	}
+};
+
+// Returns true if it has found the goal or there isn't any more pixels to search
+Game.implementation.prototype.updateNavigation = function (state, goal) {
+	this.updateDepthFirstSearch(state, goal);
 };
 
 Game.implementation.prototype.drawInfoPoint = function (point, info, colour) {
@@ -101,6 +187,33 @@ Game.implementation.prototype.draw = function() {
 
 	self.__now = p.millis();
 
+	//
+	// Update logic
+	//
+
+	if (self.__state != null) {
+		// Deal with first time we come here (or it'll have a huge time difference)
+		if (self.__state.timestamp === 0)
+			self.__state.timestamp = self.__now;
+
+		// Deal with time
+		var delay = self.__now - self.__state.timestamp;
+		var delayDelta = self.__iterationDelay - delay;
+		if (self.__state.isTraversing && delayDelta < 0) {
+			delayDelta *= -1;
+			// What if we have enough time for more than one iteration? :)
+			var iterations = Math.floor(delayDelta / self.__iterationDelay) + 1;
+			self.__state.timestamp = self.__now + delayDelta;
+
+			for (var i = 0; i < iterations; ++i)
+				self.updateNavigation(self.__state, self.__goal);
+		}
+	}
+
+	//
+	// Renders
+	//
+
 	p.fill(frontColour);
 
 	//
@@ -116,19 +229,43 @@ Game.implementation.prototype.draw = function() {
 	if (self.__debug && self.__debug.walkState) {
 		if (debugRenderLeft > 0) {
 			if (self.__debug.overlayState)
-				p.image(self.__map, debugRenderLeft, 0);
+				p.image(self.__map, debugRenderLeft, 0); // Draw the map again in the debug view
 			else {
 				p.pushStyle();
-				p.fill(255 - frontColour);
 
-				p.rect(debugRenderLeft, 0, debugRenderLeft + self.__screen.width, self.__screen.height);
+				p.stroke(frontColour);
+				p.fill(255 - frontColour);
+				p.rect(debugRenderLeft - 1, -1, debugRenderLeft + self.__screen.width + 1, self.__screen.height + 1);
 
 				p.popStyle();
 			}
 		}
 
-		if (self.__goal != null && self.__goal !== undefined)
-			self.drawInfoPoint(self.__goal, "Goal", 0xFF00FF00);
+		if (self.__state != null && self.__state.map != null)
+			p.image(self.__state.map, debugRenderLeft, 0);
+
+		if (self.__goal != null && self.__goal !== undefined) {
+			var goal = { x: self.__goal.x + debugRenderLeft, y: self.__goal.y };
+			self.drawInfoPoint(goal, "Goal", 0xFF99FF99);
+		}
+
+		if (self.__start != null && self.__start !== undefined) {
+			var start = { x: self.__start.x + debugRenderLeft, y: self.__start.y };
+			self.drawInfoPoint(start, "Start", 0xFF999BFF);
+		}
+
+		p.pushStyle();
+		p.fill(frontColour);
+		p.textAlign(p.LEFT);
+		var message = "Uhm... nothing to do";
+		if (self.__state != null)
+			message = self.__state.isTraversing ? "Searching..." : "Stopped";
+		else if (self.__goal == null)
+			message = "Click to set the goal";
+		else if (self.__start == null)
+			message = "Click to set the start point";
+
+		p.text(message, debugRenderLeft + 15, self.__screen.height - 15);
 	}
 
 	// And Frame Rate hoooo yeaaaahhhhh
