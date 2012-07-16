@@ -112,6 +112,53 @@ Game.implementation.prototype.setColour = function (map, pos, colour) {
 	map.pixels.setPixel(i, colour);
 };
 
+Game.implementation.prototype.updateAStarSearch = function (state, goal) {
+	var self = this;
+
+	if (!isValid(state) || !(isValid(state.queue) || isValid(state.lastPos))) return;
+
+	if (!isValid(state.queue)) {
+		// Needs initialising
+		state.queue = new Api.DataStruct.PriorityQueue();
+		var weight = self.dist(state.lastPos, goal);
+		state.queue.enqueue({ p: state.lastPos, steps: 0 }, weight);
+		return;
+	}
+
+	// Are we stuck?
+	if (state.queue.size() == 0) {
+		state.isTraversing = false;
+		return;
+	}
+
+	// Continue searching
+	var vertex = state.queue.dequeue();
+	state.lastPos = vertex.p;
+	if (vertex.p.x === goal.x && vertex.p.y === goal.y) {
+		state.isTraversing = false;
+		console.log('Steps: ' + vertex.steps);
+		return;
+	}
+
+	self.setColour(state.map, vertex.p, self.level.properties.colours.visited);
+
+	// Add children to the queue
+	for (var dx = 0; dx < 3; ++dx) {
+		for (var dy = 0; dy < 3; ++dy) {
+			if (self.level.properties.search_map[dy * 3 + dx] === 1) {
+				var pos = { x: vertex.p.x + (dx - 1), y: vertex.p.y + (dy - 1) };
+				if (pos.x >= 0 && pos.x < self.__screen.width && pos.y >= 0 && pos.y < self.__screen.height) {
+					if (!(self.wasVisited(state.map, pos) || self.isWall(pos))) {
+						var weight = self.dist(pos, goal);
+						state.queue.enqueue({ p: pos, steps: vertex.steps + 1 }, weight);
+						self.setColour(state.map, pos, self.level.properties.colours.in_stack);
+					}
+				}
+			}
+		}
+	}
+};
+
 Game.implementation.prototype.updateBreathFirstSearch = function (state, goal) {
 	var self = this;
 
@@ -203,7 +250,7 @@ Game.implementation.prototype.updateDepthFirstSearch = function (state, goal) {
 
 // Returns true if it has found the goal or there isn't any more pixels to search
 Game.implementation.prototype.updateNavigation = function (state, goal) {
-	this.updateBreathFirstSearch(state, goal);
+	this.updateAStarSearch(state, goal);
 };
 
 Game.implementation.prototype.drawInfoPoint = function (point, info, colour) {
