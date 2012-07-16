@@ -36,3 +36,7 @@ Api.Core.WaitForSignalArray = function (signals, callback) {
 		}
 	}, 10);
 };
+
+function isValid (obj) {
+	return obj != null && obj !== undefined;
+}
