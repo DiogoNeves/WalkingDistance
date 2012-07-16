@@ -8,11 +8,8 @@ Api.DataStruct = Api.DataStruct || {};
 
 var Queue = {};
 Queue.implementation = function () {
-	var self = this;
-
-	self.__head = null;
-	self.__tail = null;
-	self.__size = 0;
+	this.__inbox = new Api.DataStruct.Stack();
+	this.__outbox = new Api.DataStruct.Stack();
 };
 
 Api.DataStruct.Queue = function () {
@@ -20,31 +17,23 @@ Api.DataStruct.Queue = function () {
 };
 
 Api.DataStruct.Queue.prototype.size = function () {
-	return this.implementation.__size;
+	return this.implementation.__inbox.size() + this.implementation.__outbox.size();
 };
 
 Api.DataStruct.Queue.prototype.enqueue = function (value) {
 	if (value == null) return;
 
-	// Add to tail
-	++this.implementation.__size;
-	var newElement = { data: value, next: null };
-	if (this.implementation.__tail != null)
-		this.implementation.__tail.next = newElement;
-	this.implementation.__tail = newElement;
-
-	// If this is the first element, set the tail as well
-	if (this.implementation.__head == null)
-		this.implementation.__head = this.implementation.__tail;
+	this.implementation.__inbox.push(value);
 };
 
 Api.DataStruct.Queue.prototype.dequeue = function (value) {
-	if (this.implementation.__size <= 0) return null;
+	if (this.size() <= 0) return null;
 
-	--this.implementation.__size;
-	var head = this.implementation.__head;
-	this.implementation.__head = head.next;
-	head.next = null;
+	if (this.implementation.__outbox.size() <= 0) {
+		// we need to move from inbox into outbox
+		while (this.implementation.__inbox.size() > 0)
+			this.implementation.__outbox.push(this.implementation.__inbox.pop());
+	}
 
-	return head.data;
+	return this.implementation.__outbox.pop();
 };
