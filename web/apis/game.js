@@ -35,6 +35,9 @@ Game.implementation = function (level) {
 	self.__state = null; // Used to keep state between iterations
 	self.__stateMap = null; // Used for debug draw
 	self.__goal = null;
+	self.__start = null;
+
+	self.__isTraversing = false;
 };
 
 
@@ -49,6 +52,15 @@ Game.implementation.prototype.mouseClicked = function () {
 		var pos = { x: self.processing.mouseX, y: self.processing.mouseY };
 		if (pos.x < self.__screen.width) // Account for when we're extending the canvas
 			self.__goal = pos;
+	} else if (self.__start == null) {
+		var pos = { x: self.processing.mouseX, y: self.processing.mouseY };
+		if (pos.x < self.__screen.width) { // Account for when we're extending the canvas
+			// Blank any previous state
+			self.__state = {};
+			self.__stateMap = self.processing.createImage(self.__screen.width, self.__screen.height, self.processing.RGB);
+			self.__start = pos;
+			self.__isTraversing = true;
+		}
 	}
 };
 
@@ -73,6 +85,11 @@ Game.implementation.prototype.startGame = function() {
 		self.processing.mouseClicked = objectWrapper(self, self.mouseClicked);
 		self.processing.loop();
 	});
+};
+
+// Returns true if it has found the goal or there isn't any more pixels to search
+Game.implementation.prototype.updateNavigation = function () {
+	return false;
 };
 
 Game.implementation.prototype.drawInfoPoint = function (point, info, colour) {
@@ -101,6 +118,17 @@ Game.implementation.prototype.draw = function() {
 
 	self.__now = p.millis();
 
+	//
+	// Update logic
+	//
+
+	if (self.__isTraversing)
+		self.__isTraversing != self.updateNavigation();
+
+	//
+	// Renders
+	//
+
 	p.fill(frontColour);
 
 	//
@@ -119,16 +147,32 @@ Game.implementation.prototype.draw = function() {
 				p.image(self.__map, debugRenderLeft, 0);
 			else {
 				p.pushStyle();
-				p.fill(255 - frontColour);
 
-				p.rect(debugRenderLeft, 0, debugRenderLeft + self.__screen.width, self.__screen.height);
+				p.stroke(frontColour);
+				p.fill(255 - frontColour);
+				p.rect(debugRenderLeft, -1, debugRenderLeft + self.__screen.width, self.__screen.height + 1);
 
 				p.popStyle();
 			}
 		}
 
-		if (self.__goal != null && self.__goal !== undefined)
-			self.drawInfoPoint(self.__goal, "Goal", 0xFF00FF00);
+		if (self.__stateMap != null)
+			p.image(debugRenderLeft, 0);
+
+		if (self.__goal != null && self.__goal !== undefined) {
+			var goal = { x: self.__goal.x + debugRenderLeft, y: self.__goal.y };
+			self.drawInfoPoint(goal, "Goal", 0xFF99FF99);
+		}
+
+		if (self.__start != null && self.__start !== undefined) {
+			var start = { x: self.__start.x + debugRenderLeft, y: self.__start.y };
+			self.drawInfoPoint(start, "Start", 0xFF999BFF);
+		}
+
+		p.pushStyle();
+		p.fill(frontColour);
+		p.textAlign(p.LEFT);
+		p.text((self.__isTraversing ? "Searching..." : "Stopped"), debugRenderLeft + 15, self.__screen.height - 15);
 	}
 
 	// And Frame Rate hoooo yeaaaahhhhh
