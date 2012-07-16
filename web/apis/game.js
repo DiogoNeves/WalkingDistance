@@ -37,7 +37,7 @@ Game.implementation = function (level) {
 	self.__goal = null;
 	self.__start = null;
 
-	self.__isTraversing = false;
+	self.__iterationDelay = 500; // in millis
 };
 
 
@@ -56,7 +56,7 @@ Game.implementation.prototype.mouseClicked = function () {
 		var pos = { x: self.processing.mouseX, y: self.processing.mouseY };
 		if (pos.x < self.__screen.width) { // Account for when we're extending the canvas
 			// Blank any previous state
-			self.__state = {};
+			self.__state = { isTraversing: true, timestamp: 0, lastPos: pos };
 			self.__stateMap = self.processing.createImage(self.__screen.width, self.__screen.height, self.processing.RGB);
 			self.__start = pos;
 			self.__isTraversing = true;
@@ -71,6 +71,9 @@ Game.implementation.prototype.startGame = function() {
 	// This could probably be done with a counter but because I don't know if ++ is thread safe in js
 	// I decided to go with a more expensive but safer approach...
 	var loadedSignal = { value: false };
+
+	// Fix-up the neighbour colour format (str to int as json doesn't support hex values)
+	self.level.properties.neighbour_colour = parseInt(self.level.properties.neighbour_colour);
 
 	// Load map
 	self.__map = self.processing.loadImage(self.level.resources.map, 'png', function() {
@@ -122,8 +125,13 @@ Game.implementation.prototype.draw = function() {
 	// Update logic
 	//
 
-	if (self.__isTraversing)
-		self.__isTraversing != self.updateNavigation();
+	if (self.__state != null) {
+		if (self.__state.isTraversing && delay > self.__iterationDelay) {
+			var delay = self.__now - self.__state.timestamp;
+			self.__state.timestamp = self.__now;
+			self.__state.isTraversing != self.updateNavigation();
+		}
+	}
 
 	//
 	// Renders
@@ -172,7 +180,15 @@ Game.implementation.prototype.draw = function() {
 		p.pushStyle();
 		p.fill(frontColour);
 		p.textAlign(p.LEFT);
-		p.text((self.__isTraversing ? "Searching..." : "Stopped"), debugRenderLeft + 15, self.__screen.height - 15);
+		var message = "Uhm... nothing to do";
+		if (self.__state != null)
+			message = self.__state.isTraversing ? "Searching..." : "Stopped";
+		else if (self.__goal == null)
+			message = "Click to set the goal";
+		else if (self.__start == null)
+			message = "Click to set the start point";
+
+		p.text(message, debugRenderLeft + 15, self.__screen.height - 15);
 	}
 
 	// And Frame Rate hoooo yeaaaahhhhh
