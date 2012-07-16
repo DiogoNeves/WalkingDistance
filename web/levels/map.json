@@ -1,0 +1,10 @@
+{
+	"name": "Map",
+
+	"resources": {
+		"map": "imgs/map"
+	},
+
+	"properties": {
+	}
+}
