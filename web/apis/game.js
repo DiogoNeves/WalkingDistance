@@ -35,8 +35,10 @@ Game.implementation = function (level) {
 	self.__state = null; // Used to keep state between iterations
 	self.__goal = null;
 	self.__start = null;
+	self.__distThreshold = 5;
 
-	self.__iterationDelay = 1; // in millis
+	self.__iterationDelay = 0; // in millis
+	self.__iterations = 0;
 };
 
 
@@ -112,6 +114,13 @@ Game.implementation.prototype.setColour = function (map, pos, colour) {
 	map.pixels.setPixel(i, colour);
 };
 
+Game.implementation.prototype.calculateWeight = function (pos, start, goal) {
+	var self = this;
+	var goalDist = self.dist(pos, goal);
+	var startDist = self.dist(pos, start);
+	return goalDist - startDist;
+}
+
 Game.implementation.prototype.updateAStarSearch = function (state, goal) {
 	var self = this;
 
@@ -120,7 +129,7 @@ Game.implementation.prototype.updateAStarSearch = function (state, goal) {
 	if (!isValid(state.queue)) {
 		// Needs initialising
 		state.queue = new Api.DataStruct.PriorityQueue();
-		var weight = self.dist(state.lastPos, goal);
+		var weight = self.calculateWeight(state.lastPos, self.__start, goal);
 		state.queue.enqueue({ p: state.lastPos, steps: 0 }, weight);
 		return;
 	}
@@ -137,6 +146,7 @@ Game.implementation.prototype.updateAStarSearch = function (state, goal) {
 	if (vertex.p.x === goal.x && vertex.p.y === goal.y) {
 		state.isTraversing = false;
 		console.log('Steps: ' + vertex.steps);
+		console.log('Finished in ' + self.__iterations + ' iterations');
 		return;
 	}
 
@@ -149,7 +159,7 @@ Game.implementation.prototype.updateAStarSearch = function (state, goal) {
 				var pos = { x: vertex.p.x + (dx - 1), y: vertex.p.y + (dy - 1) };
 				if (pos.x >= 0 && pos.x < self.__screen.width && pos.y >= 0 && pos.y < self.__screen.height) {
 					if (!(self.wasVisited(state.map, pos) || self.isWall(pos))) {
-						var weight = self.dist(pos, goal);
+						var weight = self.calculateWeight(pos, self.__start, goal);
 						state.queue.enqueue({ p: pos, steps: vertex.steps + 1 }, weight);
 						self.setColour(state.map, pos, self.level.properties.colours.in_stack);
 					}
@@ -183,6 +193,7 @@ Game.implementation.prototype.updateBreathFirstSearch = function (state, goal) {
 	if (vertex.p.x === goal.x && vertex.p.y === goal.y) {
 		state.isTraversing = false;
 		console.log('Steps: ' + vertex.steps);
+		console.log('Finished in ' + self.__iterations + ' iterations');
 		return;
 	}
 
@@ -292,13 +303,19 @@ Game.implementation.prototype.draw = function() {
 		var delay = self.__now - self.__state.timestamp;
 		var delayDelta = self.__iterationDelay - delay;
 		if (self.__state.isTraversing && delayDelta < 0) {
-			delayDelta *= -1;
-			// What if we have enough time for more than one iteration? :)
-			var iterations = Math.floor(delayDelta / self.__iterationDelay) + 1;
-			self.__state.timestamp = self.__now; //+ delayDelta;
+			self.__state.timestamp = self.__now;
 
-			//for (var i = 0; i < iterations; ++i)
+			// What if we have enough time for more than one iteration? :)
+			var iterations = 0;
+			if (self.__iterationDelay <= 0)
+				iterations = self.__iterationDelay * -1 + delayDelta * -1;
+			else
+				iterations = Math.floor(delayDelta / self.__iterationDelay) * -1;
+
+			for (var i = 0; i < iterations && self.__state.isTraversing; ++i) {
 				self.updateNavigation(self.__state, self.__goal);
+				++self.__iterations;
+			}
 		}
 	}
 
