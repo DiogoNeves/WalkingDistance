@@ -49,25 +49,26 @@ Api.DataStruct.PriorityQueue.prototype.dequeue = function (value) {
 
 	var node = this.implementation.__data[0];
 	this.implementation.__data[0] = this.implementation.__data[--this.implementation.__size];
+	this.implementation.__data[this.implementation.__size] = null;
 
 	var i = 0;
 	while (i < this.implementation.__size) {
 		var li = i * 2 + 1;
 		var ri = i * 2 + 2;
 		var parent = this.implementation.__data[i];
-		var left = this.implementation.__data[li];
-		var right = this.implementation.__data[ri];
+		var left = this.implementation.__data[li] ? this.implementation.__data[li] : { v: null, w: parent.w + 1 };
+		var right = this.implementation.__data[ri] ? this.implementation.__data[ri] : { v: null, w: parent.w + 1 };
 
 		if (parent.w > left.w || parent.w > right.w) {
 			// we have to move it down
-			if (left.w < right.w) {
+			if (left.w <= right.w) {
 				this.implementation.__data[li] = parent;
 				this.implementation.__data[i] = left;
-				i = left;
+				i = li;
 			} else {
 				this.implementation.__data[ri] = parent;
 				this.implementation.__data[i] = right;
-				i = right;
+				i = ri;
 			}
 		} else {
 			// Yeah, we found its place
