@@ -4,6 +4,8 @@ WalkingDistance
 Just a quick demo of different graph traversal algorithms
 This has crappy and copy & pasted code... feel free to destroy it!
 
+## WARNING! CONTAINS DIRTY, CRAP CODE
+
 ## How to run  
 
 1. Install Python
